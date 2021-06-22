@@ -8,6 +8,11 @@
 import Foundation
 import SwiftSoup
 
+enum ParseError: Error{
+    case empty
+    case missingKeywords
+}
+
 let semaphore = DispatchSemaphore(value: 0)
 var html: String = ""
 
@@ -36,46 +41,43 @@ struct Track {
     let title: String
 }
 
-func parseResponse(_ string: String? = nil, error: Error? = nil) throws -> [[String]] {
+func parseResponse(_ stringToParse: String) throws -> [[String]] {
     var trackArray = [[String]]()
+    let keywordsArray = ["table", "class", "sortable wikitable", "tbody", "tr", "td"]
     
-    guard error == nil else {
-        print(error!)
-        return(trackArray)
-        //I would like to return void, or just return, but the function requires a return. Setting [[String]]? didn't help
-        //This is why I had to declarre trackArray up top
+    guard stringToParse != "" else { throw ParseError.empty }
+    for words in keywordsArray{
+        guard stringToParse.contains(words) == true else { throw ParseError.missingKeywords}
     }
-
-    do {
-        trackArray.append(["Date", "Artist", "Title"])
-        let doc: Document = try SwiftSoup.parse(html)
-        let wikiTable = try doc.select("table").attr("class", "sortable wikitable jquery-tablesorter")
-        let tbody: Element = try wikiTable.select("tbody").array()[2]
-        for count in 2...11{
-            let row: Element = try tbody.select("tr").array()[count]
-            let date: String = try row.select("td").array()[1].text()
-            let artist: String = try row.select("td").array()[2].text()
-            let title: String = try row.select("td").array()[3].text()
-            trackArray.append([date, artist, title])
-        }
-
-    } catch Exception.Error(_, let message) {
-        print(message)
-    } catch {
-        print("error")
+    
+    let doc: Document = try SwiftSoup.parse(stringToParse)
+    let wikiTable = try doc.select("table").attr("class", "sortable wikitable")
+    let tbody: Element = try wikiTable.select("tbody").array()[2]
+    for count in 2...11{
+        let row: Element = try tbody.select("tr").array()[count]
+        let date: String = try row.select("td").array()[1].text()
+        let artist: String = try row.select("td").array()[2].text()
+        let title: String = try row.select("td").array()[3].text()
+        trackArray.append([date, artist, title])
     }
     return(trackArray)
 }
 
-var outputString: String = ""
-    
-let tracks = try parseResponse(html, error: nil)
-for track in tracks{
-    outputString.append("\(track[0]) \t \(track[1]) \t \(track[2])\n")
-}
-let outputFile = URL(fileURLWithPath: "/Users/soqank/Desktop/music.txt")
-try outputString.write(to: outputFile, atomically: true, encoding: String.Encoding.utf8)
- 
+var outputString: String = "Date \t Artist \t Title \n"
+
+do {
+    let tracks = try parseResponse(html)
+    for track in tracks{
+        outputString.append("\(track[0]) \t \(track[1]) \t \(track[2])\n")
+    }
+    let outputFile = URL(fileURLWithPath: "/Users/soqank/Desktop/music.txt")
+    try outputString.write(to: outputFile, atomically: true, encoding: String.Encoding.utf8)
+    } catch ParseError.empty{
+        print("Nothing to parse")
+    } catch ParseError.missingKeywords {
+        print("Missing keywords to properly run")
+    }
+
 
 /*
  //helpful info to understand swiftsoup
@@ -97,4 +99,3 @@ do {
     print("error")
 }
 */
-

@@ -1,6 +1,6 @@
 //
 //  main.swift
-//  wikiScrape_macOScommandLine
+//  wikiScrape
 //
 //  Created by Benjamin Saltzman on 6/14/21.
 //
@@ -19,7 +19,7 @@ var html: String = ""
 
 let url = URL(string: "https://en.wikipedia.org/wiki/List_of_Billboard_Hot_100_number-one_singles_of_the_1970s")!
 
-let session = URLSession(configuration: .ephemeral)
+let session = URLSession(configuration: .default)
 let task = session.dataTask(with: url) { (data, response, error) in
     if let safeData = data {
         if let dataString = String(data: safeData, encoding: .utf8){
@@ -36,15 +36,18 @@ task.resume()
 semaphore.wait()
 
 struct Track {
-    let date: String
-    let artist: String
-    let title: String
+    var date: String = "Date"
+    var artist: String = "Artist"
+    var title: String = "Title"
 }
 var numberOfAvailableRows: Int = 0
 var numberOfUseableRows = 0
 
-func parseResponse(_ stringToParse: String, rowsRequested: Int = 10) throws -> [[String]] {
-    var trackArray = [[String]]()
+func parseResponse(_ stringToParse: String, rowsRequested: Int = 10) throws -> [Track] {
+    var trackArray = [Track]()
+    let trackHeader = Track()
+    trackArray.append(trackHeader)
+    
     var rows = [Int]()
     let keywordsArray = ["table", "class", "sortable wikitable", "tbody", "tr", "td"]
     
@@ -92,20 +95,21 @@ func parseResponse(_ stringToParse: String, rowsRequested: Int = 10) throws -> [
 
     for row in rows{
         let currentRow: Element = try tbody.select("tr").array()[row]
-        let date: String = try currentRow.select("td").array()[1].text()
-        let artist: String = try currentRow.select("td").array()[2].text()
-        let title: String = try currentRow.select("td").array()[3].text()
-        trackArray.append([date, artist, title])
+        var currentTrack = Track()
+        currentTrack.date = try currentRow.select("td").array()[1].text()
+        currentTrack.artist = try currentRow.select("td").array()[2].text()
+        currentTrack.title = try currentRow.select("td").array()[3].text()
+        trackArray.append(currentTrack)
     }
     return trackArray
 }
 
-var outputString: String = "Date\tArtist\tTitle\n"
+var outputString: String = ""
 
 do {
     let tracks = try parseResponse(html)
     for track in tracks{
-        outputString.append("\(track[0])\t\(track[1])\t\(track[2])\n")
+        outputString.append("\(track.date)\t\(track.artist)\t\(track.title)\n")
     }
     let outputFile = try! FileManager.default.url(for: .desktopDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("music.txt")
     try outputString.write(to: outputFile, atomically: true, encoding: String.Encoding.utf8)

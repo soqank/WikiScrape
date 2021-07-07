@@ -36,17 +36,15 @@ task.resume()
 semaphore.wait()
 
 struct Track {
-    var date: String = "Date"
-    var artist: String = "Artist"
-    var title: String = "Title"
+    var date: String = ""
+    var artist: String = ""
+    var title: String = ""
 }
 var numberOfAvailableRows: Int = 0
 var numberOfUseableRows = 0
 
 func parseResponse(_ stringToParse: String, rowsRequested: Int = 10) throws -> [Track] {
     var trackArray = [Track]()
-    let trackHeader = Track()
-    trackArray.append(trackHeader)
     
     var rows = [Int]()
     let keywordsArray = ["table", "class", "sortable wikitable", "tbody", "tr", "td"]
@@ -107,22 +105,27 @@ func parseResponse(_ stringToParse: String, rowsRequested: Int = 10) throws -> [
 var outputString: String = ""
 
 do {
-    let tracks = try parseResponse(html)
+    let tracks = try parseResponse(html, rowsRequested:  10)
+    outputString.append("Date\tArtist\tTitle\n")
     for track in tracks{
         outputString.append("\(track.date)\t\(track.artist)\t\(track.title)\n")
     }
     let outputFile = try! FileManager.default.url(for: .desktopDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("music.txt")
     try outputString.write(to: outputFile, atomically: true, encoding: String.Encoding.utf8)
     print(outputString)
-    } catch ParseError.empty{
+} catch {
+    switch error{
+    case ParseError.empty:
         print("Nothing to parse")
-    } catch ParseError.missingKeywords {
+    case ParseError.noRequest, ParseError.tooManyRowsRequested:
+        print("Please input a number for rowsRequested between 1 and \(numberOfUseableRows)")
+    case ParseError.missingKeywords:
         print("Missing keywords to properly run")
-    } catch ParseError.tooManyRowsRequested {
-        print("Too many rows requested, only \(numberOfUseableRows) available")
-    } catch ParseError.noRequest{
-        print("Please input a number between 1 and \(numberOfUseableRows)")
+    default:
+        print("Unexpected error: \(error)")
     }
+}
+
 
 
 

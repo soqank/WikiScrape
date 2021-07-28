@@ -7,11 +7,24 @@
 import Foundation
 import SwiftSoup
 
-enum ParseError: Error{
+enum ParseError: Error, CustomStringConvertible{
     case empty
     case noRequest
     case missingKeywords
-    case tooManyRowsRequested
+    case tooManyRowsRequested(Int)
+    
+    var description: String{
+        switch self{
+        case .empty:
+            return "Nothing to parse"
+        case .noRequest:
+            return "Please input a number higher than 1"
+        case .tooManyRowsRequested(let rows):
+            return "Please input a number for rowsRequested between 1 and \(rows)"
+        case .missingKeywords:
+            return "Missing keywords to properly run"
+        }
+    }
 }
 
 let semaphore = DispatchSemaphore(value: 0)
@@ -45,20 +58,75 @@ class ParseResponse {
     var stringToParse: String
     var rowsRequested: Int
     
-    init (_ stringToParse: String, _ rowsRequested: Int){
-        self.stringToParse = stringToParse
-        self.rowsRequested = rowsRequested
-    }
     var numberOfUseableRows: Int = 0
     var trackArray = [Track]()
     var rows = [Int]()
     let keywordsArray = ["table", "class", "sortable wikitable", "tbody", "tr", "td"]
-    
     var outputString: String = ""
+    
+    init (_ stringToParse: String, _ rowsRequested: Int) throws{
+        self.stringToParse = stringToParse
+        self.rowsRequested = rowsRequested
+        
+        guard self.stringToParse != "" else { throw ParseError.empty }
+        for words in self.keywordsArray{
+            guard self.stringToParse.contains(words) == true else { throw ParseError.missingKeywords}
+        }
+        let doc: Document = try SwiftSoup.parse(stringToParse)
+        let wikiTable = try doc.select("table").attr("class", "sortable wikitable")
+        let tbody: Element = try wikiTable.select("tbody").array()[2]
+        
+        guard rowsRequested > 0 else { throw ParseError.noRequest}
+        
+        // counts the number of useable rows for year 1970
+        func useableRows() -> Int{
+            var counter:Int = 2
+            var useableRows:Int = 0
+            while true{
+                do{
+                    let row = try tbody.select("tr").array()[counter]
+                    let isNextSection:Bool = try row.html().contains("1971")
+                    if isNextSection == true{
+                        break
+                    } else {
+                        useableRows += 1
+                    }
+                    counter += 1
+                } catch{
+                    print("Error: Something happened while counting useableRows")
+                    break
+                }
+            }
+            return useableRows
+        }
+        numberOfUseableRows = useableRows()
+        guard numberOfUseableRows >= rowsRequested else { throw ParseError.tooManyRowsRequested(numberOfUseableRows)}
+        
+        // creates rows array of numbers to request elements of date, artist and title
+        // starts at 2 due to the two unuseable rows above it
+        for i in 0..<rowsRequested{
+            rows.append(i+2)
+        }
+        
+        for row in rows{
+            let currentRow: Element = try tbody.select("tr").array()[row]
+            var currentTrack = Track()
+            currentTrack.date = try select("td").array()[1].text()
+            currentTrack.artist = try select("td").array()[2].text()
+            currentTrack.title = try select("td").array()[3].text()
+            trackArray.append(currentTrack)
+        }
+        
+        outputString.append("Date\tArtist\tTitle\n")
+        for track in trackArray{
+            outputString.append("\(track.date)\t\(track.artist)\t\(track.title)\n")
+        }
+        print(outputString)
+    }
 }
 
+
 func parseResponse(_ container: ParseResponse) throws{
-    
     guard container.stringToParse != "" else { throw ParseError.empty }
     for words in container.keywordsArray{
         guard container.stringToParse.contains(words) == true else { throw ParseError.missingKeywords}
@@ -93,14 +161,14 @@ func parseResponse(_ container: ParseResponse) throws{
     }
     
     container.numberOfUseableRows = useableRows()
-    guard container.numberOfUseableRows >= container.rowsRequested else { throw ParseError.tooManyRowsRequested}
+    guard container.numberOfUseableRows >= container.rowsRequested else { throw ParseError.tooManyRowsRequested(container.numberOfUseableRows)}
     
     // creates rows array of numbers to request elements of date, artist and title
     // starts at 2 due to the two unuseable rows above it
-    for i in 1...container.rowsRequested{
+    for i in 0..<container.rowsRequested{
         container.rows.append(i+2)
     }
-
+    
     for row in container.rows{
         let currentRow: Element = try tbody.select("tr").array()[row]
         var currentTrack = Track()
@@ -109,31 +177,36 @@ func parseResponse(_ container: ParseResponse) throws{
         currentTrack.title = try currentRow.select("td").array()[3].text()
         container.trackArray.append(currentTrack)
     }
+    
+    
 }
 
 func writeToFile(container: ParseResponse, fileName: String){
     do {
-        try parseResponse(container)
+        //try parseResponse(container)
         container.outputString.append("Date\tArtist\tTitle\n")
         for track in container.trackArray{
             container.outputString.append("\(track.date)\t\(track.artist)\t\(track.title)\n")
         }
         let outputFile = try! FileManager.default.url(for: .desktopDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent(fileName)
         try container.outputString.write(to: outputFile, atomically: true, encoding: String.Encoding.utf8)
+    } catch {
+        print("\(error)")
     }
-    catch {
-        switch error{
-        case ParseError.empty:
-            print("Nothing to parse")
-        case ParseError.noRequest, ParseError.tooManyRowsRequested:
-            print("Please input a number for rowsRequested between 1 and \(container.numberOfUseableRows)")
-        case ParseError.missingKeywords:
-            print("Missing keywords to properly run")
-        default:
-            print("Unexpected error: \(error)")
-        }
-    }
+    
 }
 
-let sortedTracks1970 = ParseResponse(html, 10)
-writeToFile(container: sortedTracks1970, fileName: "Music.txt")
+
+let sortedTracks1970 = try ParseResponse(html, 10)
+//writeToFile(container: sortedTracks1970, fileName: "Music.txt")
+
+
+
+
+
+
+
+
+
+
+

@@ -9,7 +9,6 @@ import Foundation
 import SwiftSoup
 
 class Parser {
-    var rowsRequested: Int = 0
     var numberOfUseableRows: Int = 0
     var trackArray = [Track]()
     var rows = [Int]()
@@ -43,8 +42,8 @@ class Parser {
     }
     
     // Parse the html and convert it to tracks
-    func parseData(_ html: String, _ rowsRequestedInput: Int) throws -> [Track] {
-        rowsRequested = rowsRequestedInput
+    func parseData(_ html: String, _ rowsRequested: Int) throws -> [Track]{
+        guard rowsRequested > 0 else {throw ParseError.noRequest}
         
         // verifies that a string is present to parse
         guard html != "" else { throw ParseError.empty }
@@ -74,7 +73,7 @@ class Parser {
             currentTrack.title = try currentRow.select("td").array()[3].text()
             trackArray.append(currentTrack)
         }
-        
+
         return trackArray
         
     }
@@ -82,8 +81,6 @@ class Parser {
     //make sure that the rows requested fall within the useable range
     //counts the number of useable rows for year 1970, requires tbody element in scanableElement
     func useableRows(_ scanableElement: Element) throws -> Int  {
-        guard rowsRequested > 0 else { throw ParseError.noRequest}
-        
         var counter:Int = 2
         var useableRows:Int = 0
         
@@ -102,6 +99,7 @@ class Parser {
                 break
             }
         }
+
         return useableRows
     }
     
@@ -112,6 +110,36 @@ class Parser {
             outputString.append("\(track.date)\t\(track.artist)\t\(track.title)\n")
         }
         return outputString
+    }
+    
+    //writes inputFile to outputFile
+    func write(inputFile: String, outputFile: String) throws{
+        guard outputFile.isEmpty == false else {throw WriteError.emptyPath}
+        //guard inputFile.isEmpty == false else {throw WriteError.emptyInput}
+        guard inputFile.isEmpty == false else {print("inputFile is empty"); return}
+
+        let path = URL(fileURLWithPath: outputFile)
+        guard path.pathExtension.count > 0 else {throw WriteError.noExt}
+        
+        //checks if the path -file is valid
+        do{
+            var pathBase = path
+            pathBase.deleteLastPathComponent()
+            _ = try pathBase.checkResourceIsReachable()
+        } catch{
+            print("Please declare a valid path")
+        }
+        
+        //checks for existence of file and writes files
+        do{
+            if ((try? path.checkResourceIsReachable() == true) != nil) {
+                print("Writing over \(path.lastPathComponent)")
+            }
+            try inputFile.write(to: path, atomically: true, encoding: String.Encoding.utf8)
+            print("Success")
+        } catch {
+            print("\(error)")
+        }
     }
     
     //calls all the functions
